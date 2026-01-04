@@ -4,7 +4,7 @@ GUI tool to merge images or create grids from hundreds of files using ImageMagic
 # Dependencies
 
 - [ImageMagick](https://github.com/ImageMagick/ImageMagick) must be installed and in your System PATH.
-- Python installation on Windows.
+- [Python installation](https://www.python.org/downloads/) on Windows.
 	- Package dependencies: `pip install pillow tkinterdnd2`
 
 # Features
