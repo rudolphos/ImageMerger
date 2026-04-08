@@ -1,5 +1,5 @@
 # ImageMerger
-GUI tool to merge images or create grids from hundreds of files using ImageMagick.
+Python-based GUI tool to merge images or create grids from hundreds of files using ImageMagick.
 
 # Dependencies
 
@@ -8,7 +8,7 @@ GUI tool to merge images or create grids from hundreds of files using ImageMagic
 	- Package dependencies: `pip install pillow tkinterdnd2`
 
 # Features
-- Mass Merging: Combine hundreds of images into a single file.
+- Mass Merging: Combine hundreds of images into a single image file.
 - Layouts:
 	- Horizontal/Vertical: Simple side-by-side or top-to-bottom stitching.
 	- Grid: Uniform rows and columns with optional cropping/scaling.
