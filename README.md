@@ -8,15 +8,15 @@ Python-based GUI tool to merge images or create grids from hundreds of files usi
 	- Package dependencies: `pip install pillow tkinterdnd2`
 
 # Features
-- Mass Merging: Combine hundreds of images into a single image file.
-- Layouts:
+- Mass Merge: Combine hundreds of images into a single image file.
+- Layout selection:
 	- Horizontal/Vertical: Simple side-by-side or top-to-bottom stitching.
 	- Grid: Uniform rows and columns with optional cropping/scaling.
 	- Ashlar: Smart layout for packing various image sizes into one canvas.
-- Drag-and-Drop: Directly drop files into the application.
-- Live Preview: Scaled preview updates as you change settings.
-- Format control: Supports JPG, PNG, WEBP, and GIF with adjustable quality.
-- Timestamp sync: Output files inherit the timestamp of the source images.
+- Drag & Drop.
+- Live preview updates as you change settings.
+- Supports JPG, PNG, WEBP, and GIF with adjustable quality.
+- Output files inherit the timestamp of the source images.
 
 # Screenshots
 Vertical merge
