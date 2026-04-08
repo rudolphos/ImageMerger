@@ -8,6 +8,7 @@ from PIL import Image, ImageTk
 import math
 import threading
 import tempfile
+import shlex # <-- Optimization Added
 
 class ImageMagickMerger:
     def __init__(self, root):
@@ -20,7 +21,7 @@ class ImageMagickMerger:
         self.image_paths = []
         self.preview_timer = None
         self.preview_thread = None
-        self.preview_cancel = False
+        self.preview_task_id = 0
         
         self.vars = {
             'mode': tk.StringVar(value="horizontal"), 'format': tk.StringVar(value="jpg"),
@@ -196,30 +197,19 @@ class ImageMagickMerger:
             self.on_change()
 
     def handle_drop(self, event):
-        # Handle different path formats from drag-and-drop
         data = event.data
         if not data:
             return
         
-        # Handle curly brace wrapped paths (Windows with spaces)
+        # Handle curly brace wrapped paths (Windows with spaces natively from Tk)
         if data.startswith('{'):
             paths = [p.strip('{}').strip() for p in data.split('} {')]
         else:
-            # Split by whitespace, but handle quoted paths
-            paths = []
-            current = ""
-            in_quotes = False
-            for char in data:
-                if char == '"':
-                    in_quotes = not in_quotes
-                elif char in (' ', '\n', '\r', '\t') and not in_quotes:
-                    if current:
-                        paths.append(current)
-                        current = ""
-                else:
-                    current += char
-            if current:
-                paths.append(current)
+            # shlex.split perfectly handles strings with embedded quotes and spaces
+            try:
+                paths = shlex.split(data)
+            except ValueError:
+                paths = data.split() # Fallback
         
         # Clean and validate paths
         valid_paths = []
@@ -260,160 +250,185 @@ class ImageMagickMerger:
         return dims
 
     def build_command(self, output_path, preview=False):
-        paths = [p.replace('\\', '/') for p in self.image_paths]
-        # Escape special characters for ImageMagick (# is special, needs \#)
-        paths = [p.replace('#', '\\#') for p in paths]
-        output_path = output_path.replace('\\', '/').replace('#', '\\#')
-        
-        mode = self.vars['mode'].get()
-        scale = 0.5 if preview else 1.0
-        v = self.vars  # Shorthand
+            # Optimization: Remove harmful escaping. shell=False handles paths correctly.
+            paths = [p.replace('\\', '/') for p in self.image_paths]
+            output_path = output_path.replace('\\', '/')
+            
+            mode = self.vars['mode'].get()
+            scale = 0.5 if preview else 1.0
+            v = self.vars  # Shorthand
 
-        if mode == "ashlar":
-            dims = self.get_dimensions()
-            if not dims:
-                return None
-            
-            cw, ch = v['canvas_w'].get(), v['canvas_h'].get()
-            if cw == 0 or ch == 0:
-                area = sum(w * h for w, h in dims)
-                side = max(int(math.sqrt(area * 1.5)), 1000, int(max(w for w,h in dims) * 1.2))
-                cw = ch = side
-            if scale < 1:
-                cw, ch = int(cw * scale), int(ch * scale)
-            
-            cmd = ['magick'] + paths + ['-depth', '8']
-            if v['normalize_size'].get():
-                cmd.extend(['-resize', f'{int(v["target_size"].get() * scale)}x{int(v["target_size"].get() * scale)}'])
-            if v['format'].get() in ['jpg', 'jpeg']:
-                cmd.extend(['-sampling-factor', '4:4:4', '-quality', str(85 if scale < 1 else v['quality'].get())])
-            border = v['border'].get() or 1
-            if v['border'].get() == 0:
-                cmd.extend(['-bordercolor', 'transparent'])
-            if v['best_fit'].get():
-                cmd.extend(['-define', 'ashlar:best-fit=true'])
-            if v['show_labels'].get():
-                cmd.extend(['-label', '%f'])
-            cmd.append(f"ashlar:{output_path}[{cw}x{ch}+{border}+{border}]")
-            return cmd
-
-        elif mode == "grid":
-            cols = v['grid_cols'].get() or int(math.ceil(math.sqrt(len(paths))))
-            cmd = ['magick', 'montage'] + paths + ['-depth', '8']
-            
-            if v['grid_fit'].get() in ["crop", "scale"]:
-                dims = [d for d in self.get_dimensions() if d[0] > 0 and d[1] > 0]
-                if dims:
-                    if v['use_smallest'].get():
-                        tw, th = min(dims, key=lambda d: d[0] * d[1])
-                    else:
-                        tw = sum(w for w,h in dims) // len(dims)
-                        th = sum(h for w,h in dims) // len(dims)
-                    if scale < 1:
-                        tw, th = int(tw * scale), int(th * scale)
-                    if v['grid_fit'].get() == "crop":
-                        cmd.extend(['-resize', f'{tw}x{th}^', '-gravity', 'center', '-extent', f'{tw}x{th}'])
-                    else:
-                        cmd.extend(['-resize', f'{tw}x{th}' if v['use_smallest'].get() else f'{tw}x{th}!'])
-            
-            bg = 'white' if v['format'].get() in ['jpg', 'jpeg'] else 'transparent'
-            sp = v['spacing'].get()
-            cmd.extend(['-background', bg, '-tile', f'{cols}x', '-geometry', f'+{sp}+{sp}'])
-            if v['format'].get() in ['jpg', 'jpeg']:
-                cmd.extend(['-sampling-factor', '4:4:4', '-quality', str(85 if scale < 1 else v['quality'].get()), 
-                        '-alpha', 'remove', '-alpha', 'off'])
-            cmd.append(output_path)
-            return cmd
-
-        else:  # horizontal/vertical
-            cmd = ['magick'] + paths
-            if scale < 1:
-                cmd.extend(['-resize', '25%'])
-            
-            if v['match_size'].get():
+            if mode == "ashlar":
                 dims = self.get_dimensions()
-                if dims:
-                    func = min if v['match_smallest'].get() else max
-                    if mode == "vertical":
-                        w = func(w for w,h in dims if w > 0)
-                        if w > 0:
-                            cmd.extend(['-resize', f'{int(w * scale)}x'])
-                    else:
-                        h = func(h for w,h in dims if h > 0)
-                        if h > 0:
-                            cmd.extend(['-resize', f'x{int(h * scale)}'])
-            
-            if v['spacing'].get() > 0:
-                cmd.extend(['-bordercolor', 'transparent', '-border', 
-                           f'{v["spacing"].get()}x{v["spacing"].get()}'])
-            cmd.append('+append' if mode == "horizontal" else '-append')
-            if v['format'].get() in ['jpg', 'jpeg']:
-                cmd.extend(['-sampling-factor', '4:4:4', '-quality', str(85 if scale < 1 else v['quality'].get())])
-            cmd.append(output_path)
-            return cmd
+                if not dims:
+                    return None
+                
+                cw, ch = v['canvas_w'].get(), v['canvas_h'].get()
+                if cw == 0 or ch == 0:
+                    area = sum(w * h for w, h in dims)
+                    side = max(int(math.sqrt(area * 1.5)), 1000, int(max(w for w,h in dims) * 1.2))
+                    cw = ch = side
+                if scale < 1:
+                    cw, ch = int(cw * scale), int(ch * scale)
+                
+                cmd = ['magick', '-quiet']
+                if preview: cmd.extend(['-define', 'jpeg:size=512x512'])
+                cmd.extend(paths + ['-depth', '8'])
+                
+                if v['normalize_size'].get():
+                    cmd.extend(['-resize', f'{int(v["target_size"].get() * scale)}x{int(v["target_size"].get() * scale)}'])
+                if v['format'].get() in ['jpg', 'jpeg']:
+                    cmd.extend(['-sampling-factor', '4:4:4', '-quality', str(85 if scale < 1 else v['quality'].get())])
+                border = v['border'].get() or 1
+                if v['border'].get() == 0:
+                    cmd.extend(['-bordercolor', 'transparent'])
+                if v['best_fit'].get():
+                    cmd.extend(['-define', 'ashlar:best-fit=true'])
+                if v['show_labels'].get():
+                    cmd.extend(['-label', '%f'])
+                cmd.append(f"ashlar:{output_path}[{cw}x{ch}+{border}+{border}]")
+                return cmd
+
+            elif mode == "grid":
+                cols = v['grid_cols'].get() or int(math.ceil(math.sqrt(len(paths))))
+                
+                cmd = ['magick', 'montage', '-quiet']
+                if preview: cmd.extend(['-define', 'jpeg:size=512x512'])
+                cmd.extend(paths + ['-depth', '8'])
+                
+                if v['grid_fit'].get() in ["crop", "scale"]:
+                    dims = [d for d in self.get_dimensions() if d[0] > 0 and d[1] > 0]
+                    if dims:
+                        if v['use_smallest'].get():
+                            tw, th = min(dims, key=lambda d: d[0] * d[1])
+                        else:
+                            tw = sum(w for w,h in dims) // len(dims)
+                            th = sum(h for w,h in dims) // len(dims)
+                        if scale < 1:
+                            tw, th = int(tw * scale), int(th * scale)
+                        if v['grid_fit'].get() == "crop":
+                            cmd.extend(['-resize', f'{tw}x{th}^', '-gravity', 'center', '-extent', f'{tw}x{th}'])
+                        else:
+                            cmd.extend(['-resize', f'{tw}x{th}' if v['use_smallest'].get() else f'{tw}x{th}!'])
+                
+                bg = 'white' if v['format'].get() in ['jpg', 'jpeg'] else 'transparent'
+                sp = v['spacing'].get()
+                cmd.extend(['-background', bg, '-tile', f'{cols}x', '-geometry', f'+{sp}+{sp}'])
+                if v['format'].get() in ['jpg', 'jpeg']:
+                    cmd.extend(['-sampling-factor', '4:4:4', '-quality', str(85 if scale < 1 else v['quality'].get()), 
+                            '-alpha', 'remove', '-alpha', 'off'])
+                cmd.append(output_path)
+                return cmd
+
+            else:  # horizontal/vertical
+                cmd = ['magick', '-quiet']
+                if preview: cmd.extend(['-define', 'jpeg:size=512x512'])
+                cmd.extend(paths)
+                
+                if scale < 1:
+                    cmd.extend(['-resize', '25%'])
+                
+                if v['match_size'].get():
+                    dims = self.get_dimensions()
+                    if dims:
+                        func = min if v['match_smallest'].get() else max
+                        if mode == "vertical":
+                            w = func(w for w,h in dims if w > 0)
+                            if w > 0:
+                                cmd.extend(['-resize', f'{int(w * scale)}x'])
+                        else:
+                            h = func(h for w,h in dims if h > 0)
+                            if h > 0:
+                                cmd.extend(['-resize', f'x{int(h * scale)}'])
+                
+                if v['spacing'].get() > 0:
+                    cmd.extend(['-bordercolor', 'transparent', '-border', 
+                            f'{v["spacing"].get()}x{v["spacing"].get()}'])
+                cmd.append('+append' if mode == "horizontal" else '-append')
+                if v['format'].get() in ['jpg', 'jpeg']:
+                    cmd.extend(['-sampling-factor', '4:4:4', '-quality', str(85 if scale < 1 else v['quality'].get())])
+                cmd.append(output_path)
+                return cmd
 
     def generate_preview(self):
         if len(self.image_paths) < 2:
             return
-        self.preview_cancel = True
-        if self.preview_thread and self.preview_thread.is_alive():
-            self.preview_thread.join(timeout=0.5)
-        self.preview_cancel = False
+        
         self.preview_status.config(text="Generating...")
-        self.preview_thread = threading.Thread(target=self._preview_worker, daemon=True)
+        self.preview_task_id += 1
+        current_id = self.preview_task_id
+        
+        fd, temp_path = tempfile.mkstemp(suffix='.jpg')
+        os.close(fd)
+        
+        cmd = self.build_command(temp_path.replace('\\', '/'), preview=True)
+        if not cmd:
+            self.preview_status.config(text="Command build failed")
+            return
+
+        self.preview_thread = threading.Thread(
+            target=self._preview_worker, 
+            args=(cmd, temp_path, current_id), 
+            daemon=True
+        )
         self.preview_thread.start()
 
-    def _preview_worker(self):
+    def _preview_worker(self, cmd, temp_path, task_id):
         try:
-            with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as f:
-                temp_path = f.name
-            
-            cmd = self.build_command(temp_path.replace('\\', '/'), preview=True)
-            if not cmd or self.preview_cancel:
-                if not cmd:
-                    self.root.after(0, lambda: self.preview_status.config(text="Command build failed"))
-                return
-            
+            if self.preview_task_id != task_id: return
+
             si = subprocess.STARTUPINFO() if os.name == 'nt' else None
             if si:
                 si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, startupinfo=si, shell=False)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, startupinfo=si, shell=False)
             
-            if self.preview_cancel:
-                if os.path.exists(temp_path):
-                    os.unlink(temp_path)
+            if self.preview_task_id != task_id:
                 return
-            
+
             if result.returncode != 0:
                 error_msg = result.stderr[:100] if result.stderr else "Unknown error"
                 self.root.after(0, lambda: self.preview_status.config(text=f"Error: {error_msg}"))
-                if os.path.exists(temp_path):
-                    os.unlink(temp_path)
                 return
             
-            self.root.after(0, lambda: self.display_preview(temp_path))
+            self.root.after(0, lambda: self.display_preview(temp_path, task_id))
+            
         except subprocess.TimeoutExpired:
             self.root.after(0, lambda: self.preview_status.config(text="Preview timeout (30s)"))
         except Exception as e:
             self.root.after(0, lambda: self.preview_status.config(text=f"Error: {str(e)[:50]}"))
+        finally:
+            if self.preview_task_id != task_id or ('result' in locals() and result.returncode != 0):
+                if os.path.exists(temp_path):
+                    try: os.unlink(temp_path)
+                    except Exception: pass
+                
+    def display_preview(self, path, task_id):
+        if self.preview_task_id != task_id:
+            if os.path.exists(path):
+                try: os.unlink(path)
+                except: pass
+            return
 
-    def display_preview(self, path):
         try:
-            img = Image.open(path)
-            w, h = self.preview_canvas.winfo_width(), self.preview_canvas.winfo_height()
-            if w <= 1 or h <= 1:
-                self.root.after(100, lambda: self.display_preview(path))
-                return
-            
-            img.thumbnail((w - 20, h - 20), Image.Resampling.LANCZOS)
-            self.preview_image = ImageTk.PhotoImage(img)
-            self.preview_canvas.delete('all')
-            self.preview_canvas.create_image(w // 2, h // 2, image=self.preview_image, anchor='center')
-            self.preview_status.config(text=f"{img.width}×{img.height} (scaled)")
-            self.root.after(5000, lambda: os.path.exists(path) and os.unlink(path))
+            with Image.open(path) as img:
+                img.load()
+                w, h = self.preview_canvas.winfo_width(), self.preview_canvas.winfo_height()
+                if w <= 1 or h <= 1:
+                    self.root.after(100, lambda: self.display_preview(path, task_id))
+                    return
+                
+                img.thumbnail((w - 20, h - 20), Image.Resampling.LANCZOS)
+                self.preview_image = ImageTk.PhotoImage(img)
+                self.preview_canvas.delete('all')
+                self.preview_canvas.create_image(w // 2, h // 2, image=self.preview_image, anchor='center')
+                self.preview_status.config(text=f"{img.width}×{img.height} (scaled)")
         except Exception as e:
             self.preview_status.config(text=f"Display error: {str(e)[:50]}")
+        finally:
+            if os.path.exists(path):
+                try: os.unlink(path)
+                except Exception: pass
 
     def merge_images(self):
         if len(self.image_paths) < 2:
@@ -423,7 +438,6 @@ class ImageMagickMerger:
         try:
             source_dir = os.path.dirname(self.image_paths[0]) or os.getcwd()
             
-            # Use first 60 chars of first filename, add count if multiple images
             base = os.path.splitext(os.path.basename(self.image_paths[0]))[0][:60]
             count = len(self.image_paths)
             suffix = f"_plus{count-1}" if count > 1 else ""
@@ -442,11 +456,10 @@ class ImageMagickMerger:
             if si:
                 si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120, startupinfo=si, shell=False)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600, startupinfo=si, shell=False)
             if result.returncode != 0:
                 raise Exception(f"ImageMagick error: {result.stderr}")
             
-            # Preserve timestamp
             try:
                 ts = os.stat(self.image_paths[0]).st_mtime
                 os.utime(output_path, (ts, ts))
