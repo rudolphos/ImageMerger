@@ -8,7 +8,9 @@ from PIL import Image, ImageTk
 import math
 import threading
 import tempfile
-import shlex # <-- Optimization Added
+import shlex
+
+Image.MAX_IMAGE_PIXELS = None
 
 class ImageMagickMerger:
     def __init__(self, root):
