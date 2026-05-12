@@ -328,7 +328,7 @@ class ImageMagickMerger:
                 cmd.extend(paths)
                 
                 if scale < 1:
-                    cmd.extend(['-resize', '25%'])
+                    cmd.extend(['-resize', '800x800>'])
                 
                 if v['match_size'].get():
                     dims = self.get_dimensions()
@@ -337,11 +337,13 @@ class ImageMagickMerger:
                         if mode == "vertical":
                             w = func(w for w,h in dims if w > 0)
                             if w > 0:
-                                cmd.extend(['-resize', f'{int(w * scale)}x'])
+                                target = int(w * scale) if scale < 1 else w
+                                cmd.extend(['-resize', f'{min(target, 800)}x' if scale < 1 else f'{w}x'])
                         else:
                             h = func(h for w,h in dims if h > 0)
                             if h > 0:
-                                cmd.extend(['-resize', f'x{int(h * scale)}'])
+                                target = int(h * scale) if scale < 1 else h
+                                cmd.extend(['-resize', f'x{min(target, 800)}' if scale < 1 else f'x{h}'])
                 
                 if v['spacing'].get() > 0:
                     cmd.extend(['-bordercolor', 'transparent', '-border', 
@@ -396,7 +398,7 @@ class ImageMagickMerger:
             self.root.after(0, lambda: self.display_preview(temp_path, task_id))
             
         except subprocess.TimeoutExpired:
-            self.root.after(0, lambda: self.preview_status.config(text="Preview timeout (30s)"))
+            self.root.after(0, lambda: self.preview_status.config(text="Preview timeout (60s)"))
         except Exception as e:
             self.root.after(0, lambda: self.preview_status.config(text=f"Error: {str(e)[:50]}"))
         finally:
