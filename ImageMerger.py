@@ -274,16 +274,15 @@ class ImageMagickMerger:
                     cw, ch = int(cw * scale), int(ch * scale)
                 
                 cmd = ['magick', '-quiet']
-                if preview: cmd.extend(['-define', 'jpeg:size=512x512'])
                 cmd.extend(paths + ['-depth', '8'])
                 
                 if v['normalize_size'].get():
                     cmd.extend(['-resize', f'{int(v["target_size"].get() * scale)}x{int(v["target_size"].get() * scale)}'])
                 if v['format'].get() in ['jpg', 'jpeg']:
                     cmd.extend(['-sampling-factor', '4:4:4', '-quality', str(85 if scale < 1 else v['quality'].get())])
-                border = v['border'].get() or 1
-                if v['border'].get() == 0:
-                    cmd.extend(['-bordercolor', 'transparent'])
+                border = v['border'].get()
+                if border == 0:
+                    cmd.extend(['-bordercolor', 'transparent' if v['format'].get() == 'png' else 'white'])
                 if v['best_fit'].get():
                     cmd.extend(['-define', 'ashlar:best-fit=true'])
                 if v['show_labels'].get():
@@ -295,7 +294,6 @@ class ImageMagickMerger:
                 cols = v['grid_cols'].get() or int(math.ceil(math.sqrt(len(paths))))
                 
                 cmd = ['magick', 'montage', '-quiet']
-                if preview: cmd.extend(['-define', 'jpeg:size=512x512'])
                 cmd.extend(paths + ['-depth', '8'])
                 
                 if v['grid_fit'].get() in ["crop", "scale"]:
@@ -311,7 +309,7 @@ class ImageMagickMerger:
                         if v['grid_fit'].get() == "crop":
                             cmd.extend(['-resize', f'{tw}x{th}^', '-gravity', 'center', '-extent', f'{tw}x{th}'])
                         else:
-                            cmd.extend(['-resize', f'{tw}x{th}' if v['use_smallest'].get() else f'{tw}x{th}!'])
+                            cmd.extend(['-resize', f'{tw}x{th}^', '-gravity', 'center', '-extent', f'{tw}x{th}'])
                 
                 bg = 'white' if v['format'].get() in ['jpg', 'jpeg'] else 'transparent'
                 sp = v['spacing'].get()
@@ -324,7 +322,6 @@ class ImageMagickMerger:
 
             else:  # horizontal/vertical
                 cmd = ['magick', '-quiet']
-                if preview: cmd.extend(['-define', 'jpeg:size=512x512'])
                 cmd.extend(paths)
                 
                 if scale < 1:
