@@ -14,6 +14,7 @@ Python-based GUI tool to merge images or create grids from hundreds of files usi
 	- Grid: Uniform rows and columns with optional cropping/scaling.
 	- Ashlar: Smart layout for packing various image sizes into one canvas.
 - Drag & Drop.
+- Can use the mouse scroll on the sliders to change the values.
 - Live preview updates as you change settings.
 - Supports JPG, PNG, WEBP, and GIF with adjustable quality.
 - Output files inherit the timestamp of the source images.
