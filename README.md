@@ -2,10 +2,14 @@
 Python-based GUI tool to merge images (JPG, PNG, GIF, WEBP) or create grids from hundreds of files using ImageMagick.
 
 # Dependencies
-
 - [ImageMagick](https://github.com/ImageMagick/ImageMagick) must be installed and in your System PATH.
 - [Python installation](https://www.python.org/downloads/) on Windows.
 	- Package dependencies: `pip install pillow tkinterdnd2`
+
+# Usage
+1. Install the dependencies above.
+2. Download `ImageMerger.py`.
+3. Run it by double-clicking it, or via `python ImageMerger.py` in a terminal opened in that folder.
 
 # Features
 - Mass Merge: Combine hundreds of images into a single image file.
@@ -23,5 +27,5 @@ Python-based GUI tool to merge images (JPG, PNG, GIF, WEBP) or create grids from
 Vertical merge
 <img width="900" height="680" alt="image" src="https://github.com/user-attachments/assets/db474485-e3b4-4829-b64f-5b0990121951" />
 
-Grid mode
+Grid mode (3x3)
 <img width="900" height="680" alt="image" src="https://github.com/user-attachments/assets/f50ab484-f8bf-4411-83fa-7a1979538de8" />
