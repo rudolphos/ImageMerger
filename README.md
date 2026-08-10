@@ -1,5 +1,5 @@
 # ImageMerger
-Python-based GUI tool to merge images or create grids from hundreds of files using ImageMagick.
+Python-based GUI tool to merge images (JPG, PNG, GIF, WEBP) or create grids from hundreds of files using ImageMagick.
 
 # Dependencies
 
