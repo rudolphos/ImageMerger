@@ -306,10 +306,14 @@ class ImageMagickMerger:
                             th = sum(h for w,h in dims) // len(dims)
                         if scale < 1:
                             tw, th = int(tw * scale), int(th * scale)
+                        fit_bg = 'white' if v['format'].get() in ['jpg', 'jpeg'] else 'transparent'
                         if v['grid_fit'].get() == "crop":
+                            # cover: fill the box, crop whatever overflows
                             cmd.extend(['-resize', f'{tw}x{th}^', '-gravity', 'center', '-extent', f'{tw}x{th}'])
                         else:
-                            cmd.extend(['-resize', f'{tw}x{th}^', '-gravity', 'center', '-extent', f'{tw}x{th}'])
+                            # scale (contain): fit inside the box, pad the shortfall
+                            cmd.extend(['-resize', f'{tw}x{th}', '-gravity', 'center',
+                                        '-background', fit_bg, '-extent', f'{tw}x{th}'])
                 
                 bg = 'white' if v['format'].get() in ['jpg', 'jpeg'] else 'transparent'
                 sp = v['spacing'].get()
